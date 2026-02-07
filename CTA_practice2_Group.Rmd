@@ -13,8 +13,8 @@ knitr::opts_chunk$set(echo = TRUE)
 
 Take a subset of the tweets data by “user_name” These names describe the name of the newspaper source of the Twitter account. Do we see different sentiment dynamics if we look only at different newspaper sources?
 
-```{r cars}
- 
+```{r}
+
 ```
 
 ## Exercise 2
@@ -132,10 +132,164 @@ tidy_tweets %>%
 
 ```
 
+
+
 ## Exercise 3
 
 Apply the Lexicoder Sentiment Dictionary to the news tweets, but break down the analysis by newspaper.
 
+### Load packages
 ```{r}
+library(tidyverse) # loads dplyr, ggplot2, tidyr and other tidy tools
+library(quanteda)  # text analysis package used here for Lexicoder sentiment dictionary
 
 ```
+
+### Read data
+```{r}
+tweets <- readRDS(gzcon(url("https://github.com/cjbarrie/CTA-ED/blob/main/data/sentanalysis/newstweets.rds?raw=true")))
+
+```
+ 
+### Keep relevant variables and rename for clarity
+```{r}
+tweets <- tweets %>%
+  select(user_username, text, created_at, user_name,
+         retweet_count, like_count, quote_count) %>%
+  rename(
+    username = user_username,   # Twitter account (used for grouping)
+    newspaper = user_name,       # newspaper display name
+    tweet = text
+  )
+
+```
+
+### Corpus construction and tokenisation
+```{r}
+# create a date variable for later aggregation
+tweets$date <- as.Date(tweets$created_at)
+
+# create a quanteda corpus object from tweet text
+tweet_corpus <- corpus(tweets, text_field = "tweet", docvars = "date")
+
+# tokenize the corpus and remove punctuation
+toks_news <- tokens(tweet_corpus, remove_punct = TRUE)
+
+```
+
+### Apply the Lexicoder sentiment dictionary
+```{r}
+# select only the positive and negative categories from the Lexicoder dictionary
+data_dictionary_LSD2015_pos_neg <- data_dictionary_LSD2015[1:2]
+
+# apply the Lexicoder dictionary to the tokenized tweets
+toks_news_lsd <- tokens_lookup(toks_news, dictionary = data_dictionary_LSD2015_pos_neg)
+
+```
+
+### Aggregate sentiment by newspaper
+```{r}
+# inspect docvars
+docvars(toks_news_lsd)
+
+# inspect available newspapers in the data
+unique(docvars(toks_news_lsd)$username)
+
+# create a document-feature matrix and aggregate sentiment by newspaper
+dfm_news_lsd <- dfm(toks_news_lsd) %>% 
+  dfm_group(groups = username)
+
+# convert to a data frame and compute overall sentiment (positive - negative)
+tidy_dfm_news_lsd <- dfm_news_lsd %>%
+  convert(to = "data.frame") %>%
+  rename("newspaper" = doc_id) %>%
+  mutate(sentiment = positive - negative)
+
+```
+
+### Figure 1: bar chart of positive and negative Lexicoder word counts by newspaper
+```{r}
+# reshape the data from wide to long format so that
+# positive and negative word counts can be plotted side by side
+tidy_long_news_lsd <- tidy_dfm_news_lsd %>%
+  select(newspaper, positive, negative) %>%
+  pivot_longer(
+    cols = c(positive, negative),
+    names_to = "sentiment_type",
+    values_to = "count"
+  )
+
+# plot the raw Lexicoder positive and negative word counts by newspaper
+tidy_long_news_lsd %>%
+  ggplot(aes(x = reorder(newspaper, -count),
+             y = count,
+             fill = sentiment_type)) +
+  geom_col(position = "dodge") +
+  coord_flip() +
+  xlab("Newspapers") +
+  ylab("Lexicoder word count") +
+  labs(fill = "Sentiment") +
+  theme_minimal()
+
+```
+
+### Figure 2: overall sentiment (positive - negative) by newspaper
+```{r}
+# plot overall tweet sentiment by newspaper
+tidy_dfm_news_lsd %>%
+  ggplot() +
+  geom_point(aes(x = reorder(newspaper, -sentiment), y = sentiment)) +
+  coord_flip() +
+  xlab("Newspapers") +
+  ylab("Overall tweet sentiment (negative to positive)") +
+  theme_minimal()
+
+```
+
+### Figure 3: sentiment dynamics over time, broken down by newspaper
+```{r}
+#recreate a document-feature matrix and group by interaction variable between newspaper and date
+dfm_news_lsd_byday <- dfm(toks_news_lsd) %>% 
+  dfm_group(groups = interaction(username, date))
+
+# convert to data frame and separate newspaper and date variables
+tidy_dfm_news_lsd_byday <- dfm_news_lsd_byday %>%
+  convert(to = "data.frame") %>%
+  extract(doc_id, into = c("newspaper", "date"), regex = "([a-zA-Z]+)\\.(.+)") %>%
+  mutate(date = as.Date(date),
+         sentiment = positive - negative)
+
+# plot sentiment trends over time for each newspaper
+tidy_dfm_news_lsd_byday %>%
+  ggplot(aes(x = date, y = sentiment)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = loess, alpha = 0.25) +
+  facet_wrap(~newspaper) +
+  xlab("date") +
+  ylab("overall sentiment (negative to positive)") +
+  ggtitle("Tweet sentiment trend across 8 British newspapers") +
+  theme_minimal()
+
+```
+
+### Interpretation：
+
+Figure 1 shows the raw counts of positive and negative words identified by the Lexicoder dictionary for each newspaper. For all eight outlets, negative words appear more often than positive ones, which suggests that news tweets tend to use more negative language overall. This is especially clear for tabloid newspapers such as the Daily Mirror and The Sun. At the same time, these differences are partly shaped by how many tweets each outlet posts, so the raw word counts should be treated with some caution.
+
+Figure 2 deals with this issue by combining positive and negative words into a single overall sentiment score. Looking at this measure, tabloids still come out as more negative overall, while broadsheet newspapers such as The Times, Telegraph, and Evening Standard are closer to neutral.
+
+Figure 3 looks at how sentiment changes over time for each newspaper. Although sentiment varies from day to day, the smoothed lines suggest that each outlet follows a fairly stable pattern across the period. Some newspapers, including the Daily Mirror and The Sun, show more short-term ups and downs, while others stay closer to neutral with less variation. Overall, differences between newspapers appear repeatedly over time, rather than being concentrated in a small number of specific dates.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
