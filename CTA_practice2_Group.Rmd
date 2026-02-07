@@ -1,0 +1,34 @@
+---
+title: "CTA_practice2_Group"
+author: "ZHUOHAN JIANG/Xiaowen Leng/Yinuo Liu"
+date: "2026-02-07"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Exercise 1
+
+Take a subset of the tweets data by “user_name” These names describe the name of the newspaper source of the Twitter account. Do we see different sentiment dynamics if we look only at different newspaper sources?
+
+```{r cars}
+ 
+```
+
+## Exercise 2
+
+Build your own (minimal) dictionary-based filter technique and plot the result.
+
+```{r pressure, echo=FALSE}
+ 
+```
+
+## Exercise 3
+
+Apply the Lexicoder Sentiment Dictionary to the news tweets, but break down the analysis by newspaper.
+
+```{r}
+
+```
