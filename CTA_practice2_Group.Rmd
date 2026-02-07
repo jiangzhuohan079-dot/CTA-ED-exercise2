@@ -21,8 +21,115 @@ Take a subset of the tweets data by “user_name” These names describe the nam
 
 Build your own (minimal) dictionary-based filter technique and plot the result.
 
-```{r pressure, echo=FALSE}
- 
+### Load data and packages
+```{r}
+library(kableExtra)
+library(tidyverse) # loads dplyr, ggplot2, and others
+library(readr) # more informative and easy way to import data
+library(stringr) # to handle text elements
+library(tidytext) # includes set of functions useful for manipulating text
+library(quanteda) # includes functions to implement Lexicoder
+library(textdata)
+library(academictwitteR) # for fetching Twitter data
+```
+
+Download the tweets data directly from the source.
+
+```{r}
+tweets  <- readRDS(gzcon(url("https://github.com/cjbarrie/CTA-ED/blob/main/data/sentanalysis/newstweets.rds?raw=true")))
+```
+
+### Select subset and tidy text
+
+Select and rename relevant columns.
+```{r}
+tweets <- tweets %>%
+  select(user_username, text, created_at, user_name) %>%
+  rename(username = user_username,
+         newspaper = user_name,
+         tweet = text)
+```
+
+Convert tweets to lowercase, break the text into individual words (tokens), filter out non-alphabetic characters, and remove stop words.
+
+```{r}
+tidy_tweets <- tweets %>% 
+  mutate(desc = tolower(tweet)) %>%
+  unnest_tokens(word, desc) %>%
+  filter(str_detect(word, "[a-z]"))
+tidy_tweets <- tidy_tweets %>%
+    filter(!word %in% stop_words$word)
+```
+
+
+### Arrange data by date
+
+Convert the created_at column into date format, sort the dataset by date, and assign an order column to preserve the tweet sequence
+
+```{r}
+tidy_tweets$date <- as.Date(tidy_tweets$created_at)
+
+tidy_tweets <- tidy_tweets %>%
+  arrange(date)
+
+tidy_tweets$order <- 1:nrow(tidy_tweets)
+```
+
+
+### Create data privacy dictionary
+
+Create a data privacy dictionary and assign a value of 1 to each word to use as a reference for counting data privacy-related terms.
+
+```{r}
+word <- c('privacy', 'data', 'leak','identity', 'theft', 'encryption', 'hacking', 'firewall', 'security', 'confidentiality', 'cyberattack', 'cybersecurity', 'surveillance', 'tracking','authentication')
+value <- rep(1, length(word))
+data_privacy <- data.frame(word, value)
+data_privacy
+```
+
+### Visualise data privacy words number per month
+
+This chunk joins the tidy_tweets dataset with the data_privacy dictionary, group the data by month. Then calculates the total number of privacy-related words per month, and visualises it with bar chart by the ggplot function.
+```{r}
+tidy_tweets %>%
+  inner_join(data_privacy) %>%
+  group_by(date, index = order %/% 1000) %>% 
+  summarise(privacywords = sum(value)) %>% 
+  ggplot(aes(date, privacywords)) +
+  geom_bar(stat= "identity") +
+  ylab("data privacy words")
+```
+### Visualise data privacy words by percentage
+
+This chunk calculates the percentage of data privacy words in the tweets per day. It counts the total number of words per day, then counts the occurrences of data privacy words. It then computes the percentage of data privacy words relative to the total words for each day and visualises the result as a scatter plot with a smoothed line.
+
+```{r}
+# Define keyword vectors
+data_privacy <- c('privacy', 'data', 'leak','identity', 'theft', 'encryption', 'hacking', 'firewall', 'security', 'confidentiality', 'cyberattack', 'cybersecurity', 'surveillance', 'tracking','authentication')
+
+# Calculate total vocabulary per day
+totals <- tidy_tweets %>%
+  mutate(obs=1) %>%
+  group_by(date) %>%
+  summarise(sum_words = sum(obs))
+
+# Visualise
+tidy_tweets %>%
+  mutate(obs=1) %>%
+  filter(grepl(paste0(data_privacy, collapse = "|"), word, ignore.case = T)) %>%
+  group_by(date) %>%
+  summarise(sum_pwords = sum(obs)) %>%
+  full_join(totals, by = "date") %>%  
+  mutate(
+    sum_pwords = ifelse(is.na(sum_pwords), 0, sum_pwords),
+    pctpwords = sum_pwords / sum_words
+  ) %>%
+  ggplot(aes(date, pctpwords)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = loess, alpha = 0.25) +
+  xlab("Date") + 
+  ylab("% Data privacy words")
+
 ```
 
 ## Exercise 3
