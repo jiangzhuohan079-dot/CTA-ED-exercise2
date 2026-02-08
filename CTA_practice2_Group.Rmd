@@ -12,9 +12,69 @@ knitr::opts_chunk$set(echo = TRUE)
 ## Exercise 1
 
 Take a subset of the tweets data by “user_name” These names describe the name of the newspaper source of the Twitter account. Do we see different sentiment dynamics if we look only at different newspaper sources?
+---
+title: "exercise 2-1"
+output: html_document
+---
+
+###load library and data
+```{r}
+library(academictwitteR) # for fetching Twitter data
+library(tidyverse) # loads dplyr, ggplot2, and others
+library(readr) # more informative and easy way to import data
+library(stringr) # to handle text elements
+library(tidytext) # includes set of functions useful for manipulating text
+library(quanteda) # includes functions to implement Lexicoder
+library(textdata)
+```
+```{r}
+tweets  <- readRDS(gzcon(url("https://github.com/cjbarrie/CTA-ED/blob/main/data/sentanalysis/newstweets.rds?raw=true")))
+
+```
+### Inspect and filter data
+```{r}
+tweets <- tweets %>%
+  select(user_username, text, created_at, user_name,
+         retweet_count, like_count, quote_count) %>%
+  rename(username = user_username,
+         newspaper = user_name,
+         tweet = text)
+```
+tidy text (untoken)
+```{r}
+tidy_tweets <- tweets %>% 
+  mutate(desc = tolower(tweet)) %>%
+  unnest_tokens(word, desc) %>%
+  filter(str_detect(word, "[a-z]"))
+```
+delect stop words
+```{r}
+tidy_tweets <- tidy_tweets %>%
+    filter(!word %in% stop_words$word)
+```
+
+###gen data variable, order and format date
+```{r}
+tidy_tweets <- tidy_tweets %>%
+  mutate(date = as.Date(created_at)) %>%     
+  group_by(newspaper, date) %>%
+  mutate(order = row_number())
+```
 
 ```{r}
-
+#get tweet sentiment by date and newspaper
+tweets_afi_sentiment <-tidy_tweets %>%
+  mutate(date = as.Date(created_at)) %>% 
+  inner_join(get_sentiments("afinn"), by = "word") %>% 
+  group_by(newspaper, date, index = order %/% 1000) %>% 
+  summarise(sentiment = sum(value), .groups = "drop") %>% 
+  ggplot(aes(date, sentiment)) +
+  geom_point(alpha = 0.4) +
+  geom_smooth(method = "loess", alpha = 0.2) +
+  facet_wrap(~ newspaper, scales = "free_y") +
+  ylab("afinn sentiment") +
+  ggtitle("Sentiment Trends of 8 UK Newspapers")
+tweets_afi_sentiment
 ```
 
 ## Exercise 2
